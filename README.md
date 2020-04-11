@@ -35,7 +35,17 @@ Commands:
   init         Initialize a Spring Boot Application project
   build        Build a Spring Boot Application container
   run          Run a Spring Boot Application container on Kubernetes
-  delete       Delete a Spring Boot Application fromKubernetes
+  delete       Delete a Spring Boot Application from Kubernetes
+
+All commands take the project name (which also is the relative path) 
+as the first and only argument.
+
+The 'init' command has the following options:
+
+  --web                        Use the 'web' dependency (default)
+  --webflux                    Use the 'webflux' dependency
+  --jdbc-driver {driver-name}  Add 'jdbc' and the driver dependencies
+  --service-type {type}        Expose the service using the type (default is ClusterIP)
 ```
 
 ## Installation
