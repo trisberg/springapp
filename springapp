@@ -1,0 +1,256 @@
+#!/bin/bash
+
+VERSION="0.0.1"
+
+WEBMVC=false
+WEEBFLUX=false
+JDBC=""
+DEPENDENCIES="actuator"
+SERVICE_TYPE="ClusterIP"
+
+function print_usage() {
+cat <<EOF
+springapp is for Spring Boot Applications on Kubernetes
+version $VERSION
+
+Commands:
+  init         Initialize a Spring Boot Application project
+  build        Build a Spring Boot Application container
+  run          Run a Spring Boot Application container on Kubernetes
+  delete       Delete a Spring Boot Application fromKubernetes
+
+EOF
+}
+
+pushd () {
+    command pushd "$@" > /dev/null
+}
+
+popd () {
+    command popd "$@" > /dev/null
+}
+
+function init() {
+  if [[ $NAME == "" ]]; then
+    echo "ERROR: project name must be specified"
+    exit 1
+  fi
+  if [[ -d $NAME ]]; then
+    echo "ERROR: the $NAME project already exists"
+    exit 1
+  fi
+  if [[ "$WEBMVC" = true ]]; then
+    if [[ "$WEBFLUX" = true ]]; then
+      echo "ERROR: only one of '--web' and '--webflux' options can be specified"
+      exit 1
+   else
+      DEPENDENCIES="${DEPENDENCIES},web"
+    fi
+  else
+    if [[ "$WEBFLUX" = true ]]; then
+      DEPENDENCIES="${DEPENDENCIES},webflux"
+    else
+      DEPENDENCIES="${DEPENDENCIES},web"
+    fi
+  fi
+  if [[ $JDBC > "" ]]; then
+    DEPENDENCIES="${DEPENDENCIES},jdbc,$JDBC"
+  fi
+
+  # start.spring.io
+  curl https://start.spring.io/starter.tgz \
+   -d dependencies=$DEPENDENCIES \
+   -d language=java \
+   -d javaVersion=11 \
+   -d bootVersion=2.2.6.RELEASE \
+   -d type=maven-project \
+   -d groupId=com.example \
+   -d artifactId=$NAME \
+   -d name=$NAME \
+   -d packageName=com.example.$NAME \
+   -d baseDir=$NAME | tar -xzvf -
+
+  # add controller
+  pushd $PWD
+  cd $NAME/src/main/java/com/example/${NAME//-}
+  main=$(ls)
+  len=$(expr length "$NAME")
+  prefix=${main:0:$len}
+cat <<EOF > ${prefix}Controller.java
+package com.example.$NAME;
+
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestMapping;
+
+@RestController
+public class ${prefix}Controller {
+
+	@RequestMapping("/")
+	public String index() {
+		return "Hello!";
+	}
+}
+EOF
+  popd
+
+  # springbootapplication
+cat <<EOF > $NAME/boot-app.yaml
+apiVersion: apps.mononoke.local/v1alpha1
+kind: SpringBootApplication
+metadata:
+  name: $NAME
+spec:
+  template:
+    metadata:
+      labels:
+        app: $NAME
+    spec:
+      containers:
+      - name: application
+        image: $NAME
+        resources:
+          limits:
+            memory: 1Gi
+EOF
+
+  # service
+cat <<EOF > $NAME/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: $NAME
+spec:
+  type: $SERVICE_TYPE
+  selector:
+    app: $NAME
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+EOF
+
+  # skaffold
+  cd $NAME
+  skaffold init --skip-build --force=true
+  mv ./skaffold.yaml ./skaffold.yaml.tmp
+  sed "s/deploy:/build:+  local:+    push: true+  artifacts:+    - image: $NAME+      buildpack:+        builder: 'paketobuildpacks\/builder:bionic'+  tagPolicy:+    sha256: {}+deploy:/" ./skaffold.yaml.tmp | tr '+' '\n' > ./skaffold.yaml
+  rm ./skaffold.yaml.tmp
+  cd ..
+
+  echo "You can edit the code using 'code $NAME $NAME/src/main/java/com/example/${NAME}/${prefix}Controller.java'"
+}  
+
+function build() {
+  if [[ $NAME == "" ]]; then
+    echo "ERROR: project name must be specified"
+    exit 1
+  fi
+  if [[ ! -d $NAME ]]; then
+    echo "ERROR: can not find the $NAME project"
+    exit 1
+  fi
+  pushd $PWD
+  cd $NAME
+  skaffold build
+  popd
+}  
+
+function run() {
+  if [[ $NAME == "" ]]; then
+    echo "ERROR: project name must be specified"
+    exit 1
+  fi
+  if [[ ! -d $NAME ]]; then
+    echo "ERROR: can not find the $NAME project"
+    exit 1
+  fi
+  pushd $PWD
+  cd $NAME
+  skaffold run
+  popd
+}  
+
+function delete() {
+  if [[ $NAME == "" ]]; then
+    echo "ERROR: project name must be specified"
+    exit 1
+  fi
+  if [[ ! -d $NAME ]]; then
+    echo "ERROR: can not find the $NAME project"
+    exit 1
+  fi
+  pushd $PWD
+  cd $NAME
+  skaffold delete
+  popd
+}  
+
+if [[ $1 == "--help" || $1 == "-h" ]] ; then
+    print_usage
+    exit 0
+fi
+
+if [[ $# == 0 ]]; then
+  print_usage
+  exit 0
+fi
+
+COMMAND="$1"
+shift
+
+# ARGS #
+while [[ $# > 0 ]]
+do
+  if [[ $1 == -* ]]; then
+    key="$1"
+    case ${key} in
+      --web)
+        WEBMVC=true
+      ;;
+      --webflux)
+        WEBFLUX=true
+      ;;
+      --jdbc-driver)
+        JDBC=$2
+      shift
+      ;;
+      --service-type)
+        if [[ $2 = "ClusterIP" || $2 = "NodePort" || $2 = "LoadBalancer" ]]; then
+          SERVICE_TYPE=$2
+        else
+          echo "ERROR: Invalid service-type: $2"
+          exit 1
+        fi
+      shift
+      ;;
+      *)
+      echo "ERROR: Invalid option: [$1]"
+      exit 1
+      ;;
+    esac
+    shift
+  else
+    if [[ $NAME = "" ]]; then
+      NAME="$1"
+      shift
+    else
+      echo "ERROR: Invalid argument: [$1]"
+      exit 1
+    fi
+  fi
+done
+
+# COMMANDS #
+
+if [[ "${COMMAND}" == "init" ]]; then
+  init
+elif [[ "${COMMAND}" == "build" ]]; then
+  build
+elif [[ "${COMMAND}" == "run" ]]; then
+  run
+elif [[ "${COMMAND}" == "delete" ]]; then
+  delete
+else
+  echo "$COMMAND is an invalid command"
+  exit 1;
+fi
