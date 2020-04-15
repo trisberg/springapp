@@ -29,10 +29,11 @@ Available commands are listed via the help text:
 ```
 $ springapp --help
 springapp is for Spring Boot Applications on Kubernetes
-version 0.0.1
+version 0.0.2
 
 Commands:
   init         Initialize a Spring Boot Application project
+  bind         Bind a service to a Spring Boot Application
   build        Build a Spring Boot Application container
   run          Run a Spring Boot Application container on Kubernetes
   delete       Delete a Spring Boot Application from Kubernetes
@@ -46,6 +47,12 @@ The 'init' command has the following options:
   --webflux                    Use the 'webflux' dependency
   --jdbc-driver {driver-name}  Add 'jdbc' and the driver dependencies
   --service-type {type}        Expose the service using the type (default is ClusterIP)
+
+The 'bind' command has the following options:
+
+  --name                       The name of the service to bind
+  --user                       Username for login (defaults to database type default)
+  --database                   Database name (defaults to database type default)
 ```
 
 ## Installation
