@@ -7,6 +7,10 @@ WEEBFLUX=false
 JDBC=""
 DEPENDENCIES="actuator"
 SERVICE_TYPE="ClusterIP"
+SERVICE=""
+TYPE=""
+USER=""
+DATABASE=""
 
 function print_usage() {
 cat <<EOF
@@ -15,6 +19,7 @@ version $VERSION
 
 Commands:
   init         Initialize a Spring Boot Application project
+  bind         Bind a service to a Spring Boot Application
   build        Build a Spring Boot Application container
   run          Run a Spring Boot Application container on Kubernetes
   delete       Delete a Spring Boot Application from Kubernetes
@@ -28,6 +33,12 @@ The 'init' command has the following options:
   --webflux                    Use the 'webflux' dependency
   --jdbc-driver {driver-name}  Add 'jdbc' and the driver dependencies
   --service-type {type}        Expose the service using the type (default is ClusterIP)
+
+The 'bind' command has the following options:
+
+  --name                       The name of the service to bind
+  --user                       Username for login (defaults to database type default)
+  --database                   Database name (defaults to database type default)
 
 EOF
 }
@@ -150,6 +161,85 @@ EOF
   echo "You can edit the code using 'code $NAME $NAME/src/main/java/com/example/${NAME}/${prefix}Controller.java'"
 }  
 
+function bind() {
+  if [[ $NAME == "" ]]; then
+    echo "ERROR: project name must be specified"
+    exit 1
+  fi
+  if [[ ! -d $NAME ]]; then
+    echo "ERROR: can not find the $NAME project"
+    exit 1
+  fi
+  if [[ $SERVICE == "" ]]; then
+    echo "ERROR: service name must be specified using '--name' option"
+    exit 1
+  fi
+  IFS='-' read -a parts <<< $SERVICE
+  if [[ "${#parts[*]}" > "1" ]]; then
+    TYPE=${parts[1]}
+  else
+    echo "ERROR: service type must be last part of service name: $SERVICE"
+    exit 1
+  fi
+  # look for volumeMounts
+  vm_defined=$(grep -i 'volumeMount' $NAME/boot-app.yaml --count)
+  if [[ $vm_defined > 0 ]]; then
+    echo "ERROR: Only one service binding is currently supported"
+    exit 1
+  fi
+  if [[ $TYPE == "mysql" ]]; then
+    if [[ $USER == "" ]]; then
+      USER="root"
+    fi
+    if [[ $USER == "root" ]]; then
+      pwd_path="mysql-root-password"
+    else
+      pwd_path="mysql-password"
+    fi
+    if [[ $DATABASE == "" ]]; then
+      DATABASE="my_database"
+    fi
+    db_port="3306"
+  elif [[ $TYPE == "postgresql" ]]; then
+    if [[ $USER == "" ]]; then
+      USER="postgres"
+    fi
+    if [[ $DATABASE == "" ]]; then
+      DATABASE="postgres"
+    fi
+    pwd_path="postgresql-password"
+    db_port="5432"
+  else
+    echo "ERROR: $TYPE is not a supported service type"
+    exit 1
+  fi  
+  db_pwd=$(kubectl get secret $SERVICE -ojsonpath="{.data.${pwd_path}}" | base64 -d)
+  yaml="spring:
+  datasource:
+    url: \"jdbc:$TYPE://$SERVICE:$db_port/$DATABASE\"
+    username: $USER
+    password: $db_pwd
+  "
+  echo "binding $SERVICE service for user $USER"
+  kubectl create secret generic $SERVICE-binding --from-literal config.yaml="$yaml"
+  # springbootapplication
+cat <<EOF >> $NAME/boot-app.yaml
+        volumeMounts:
+        - mountPath: /workspace/config
+          name: $SERVICE-binding
+          readOnly: true
+      volumes:
+      - name: $SERVICE-binding
+        secret:
+          defaultmode: 420
+          items:
+          - key: config.yaml
+            path: application.yaml
+          secretName: $SERVICE-binding
+          type: array
+EOF
+}  
+
 function build() {
   if [[ $NAME == "" ]]; then
     echo "ERROR: project name must be specified"
@@ -224,6 +314,18 @@ do
         JDBC=$2
       shift
       ;;
+      --name)
+        SERVICE=$2
+      shift
+      ;;
+      --user)
+        USER=$2
+      shift
+      ;;
+      --database)
+        DATABASE=$2
+      shift
+      ;;
       --service-type)
         if [[ $2 = "ClusterIP" || $2 = "NodePort" || $2 = "LoadBalancer" ]]; then
           SERVICE_TYPE=$2
@@ -254,6 +356,8 @@ done
 
 if [[ "${COMMAND}" == "init" ]]; then
   init
+elif [[ "${COMMAND}" == "bind" ]]; then
+  bind
 elif [[ "${COMMAND}" == "build" ]]; then
   build
 elif [[ "${COMMAND}" == "run" ]]; then
