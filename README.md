@@ -74,3 +74,104 @@ Set the default repo for Skaffold:
 ```
 skaffold config set default-repo $USER
 ```
+
+## EXAMPLE: A database backed app - step-by-step
+
+### Initialize a new project
+
+```
+springapp init mytest --jdbc-driver hsql,mysql --service-type LoadBalancer
+```
+
+We specify `hsql` and `mysql` as the JDBC drivers and we prefer to get an external IP address so we can access the app.
+
+### Write the app code
+
+Open the controller class using:
+
+```
+code mytest mytest/src/main/java/com/example/mytest/MytestController.java
+```
+
+Then, modify the code to be:
+
+```
+package com.example.mytest;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.JdbcUtils;
+import org.springframework.jdbc.support.MetaDataAccessException;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import javax.annotation.PostConstruct;
+
+@RestController
+public class MytestController {
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
+
+    String databaseInfo = "database";
+    String databaseUser = "unknown";
+
+    @PostConstruct
+    public void init() {
+        try {
+            databaseInfo = JdbcUtils.extractDatabaseMetaData(
+                    jdbcTemplate.getDataSource(), "getDatabaseProductName");
+        } catch (MetaDataAccessException e) {}
+        if (databaseInfo.toLowerCase().contains("mysql")) {
+            databaseUser = jdbcTemplate.queryForObject("select user()", String.class);
+        }
+        if (databaseInfo.toLowerCase().contains("hsql")) {
+            databaseUser = jdbcTemplate.queryForObject("call current_user", String.class);
+        }
+    }
+
+    @RequestMapping("/")
+    public String index() {
+        return "Hello " + databaseInfo + " user " + databaseUser;
+    }
+}
+```
+
+On startup we query the database for product name and user to be displayed in the `index` method.
+
+If you run this, the app will use an embedded HSQLDB database and the index method will return:
+
+```
+Hello HSQL Database Engine user SA
+```
+
+### Bind a MySQL database and deploy the app
+
+We can bind a MySQL database that we create using a Bitnami Helm chart.
+
+```
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm install mydb --namespace default bitnami/mysql
+```
+
+Once the database is running we can bind it and deploy the app.
+
+```
+springapp bind mytest --name mydb-mysql
+springapp run mytest
+```
+
+When the app is up and runnning we can query the service for the IP address and curl the index endpoint using:
+
+```
+mytest_ip=$(kubectl get --namespace default service/mytest -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+curl ${mytest_ip}/ && echo
+```
+
+We should now see a message similar to this:
+
+```
+Hello MySQL user root@10.48.0.32
+```
+
+

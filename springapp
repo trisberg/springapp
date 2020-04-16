@@ -106,10 +106,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 @RestController
 public class ${prefix}Controller {
 
-	@RequestMapping("/")
-	public String index() {
-		return "Hello!";
-	}
+    @RequestMapping("/")
+    public String index() {
+        return "Hello!";
+	  }
 }
 EOF
   popd
