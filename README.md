@@ -11,6 +11,7 @@ POC of a CLI for creating Spring Boot Applications to run on Kubernetes
 * [Docker](https://www.docker.com/)
 * [pack CLI](https://buildpacks.io/docs/install-pack/) from the Cloud Native Buildpacks project
 * [Mononoke](https://github.com/spring-cloud-incubator/mononoke) installed
+* [Helm v3](https://helm.sh/docs/intro/install/) for installing MySQL
 
 > NOTE: This is only a POC with limited testing done in a Bash shell.
 
@@ -174,4 +175,11 @@ We should now see a message similar to this:
 Hello MySQL user root@10.48.0.32
 ```
 
+### Cleanup
+
+```
+springapp delete mytest
+kubectl delete secret mydb-mysql-binding
+helm delete --namespace default mydb
+```
 
