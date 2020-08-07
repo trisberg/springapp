@@ -10,7 +10,6 @@ POC of a CLI for creating Spring Boot Applications to run on Kubernetes
 * [Skaffold](https://skaffold.dev/)
 * [Docker](https://www.docker.com/)
 * [pack CLI](https://buildpacks.io/docs/install-pack/) from the Cloud Native Buildpacks project
-* [Mononoke](https://github.com/spring-cloud-incubator/mononoke) installed
 * [Helm v3](https://helm.sh/docs/intro/install/) for installing MySQL
 
 > NOTE: This is only a POC with limited testing done in a Bash shell.
