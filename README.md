@@ -29,7 +29,7 @@ Available commands are listed via the help text:
 ```
 $ springapp --help
 springapp is for Spring Boot Applications on Kubernetes
-version 0.0.2
+version 0.0.3
 
 Commands:
   init         Initialize a Spring Boot Application project
