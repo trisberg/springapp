@@ -236,12 +236,11 @@ cat <<EOF >> $NAME/deployment.yaml
       volumes:
       - name: $SERVICE-binding
         secret:
-          defaultmode: 420
+          defaultMode: 420
           items:
           - key: config.yaml
             path: application.yaml
           secretName: $SERVICE-binding
-          type: array
 EOF
 }  
 
