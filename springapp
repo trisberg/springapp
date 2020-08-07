@@ -3,7 +3,7 @@
 VERSION="0.0.2"
 
 WEBMVC=false
-WEEBFLUX=false
+WEBFLUX=false
 JDBC=""
 DEPENDENCIES="actuator"
 SERVICE_TYPE="ClusterIP"
@@ -115,21 +115,26 @@ EOF
   popd
 
   # springbootapplication
-cat <<EOF > $NAME/boot-app.yaml
-apiVersion: apps.mononoke.local/v1alpha1
-kind: SpringBootApplication
+cat <<EOF > $NAME/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: $NAME
 spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: $NAME
   template:
     metadata:
       labels:
-        app: $NAME
+        app.kubernetes.io/name: $NAME
     spec:
       containers:
       - name: application
         image: $NAME
         resources:
+          requests:
+            memory: 1Gi
           limits:
             memory: 1Gi
 EOF
@@ -143,7 +148,7 @@ metadata:
 spec:
   type: $SERVICE_TYPE
   selector:
-    app: $NAME
+    app.kubernetes.io/name: $NAME
   ports:
   - protocol: TCP
     port: 80
@@ -154,7 +159,7 @@ EOF
   cd $NAME
   skaffold init --skip-build --force=true
   mv ./skaffold.yaml ./skaffold.yaml.tmp
-  sed "s/deploy:/build:+  local:+    push: true+  artifacts:+    - image: $NAME+      buildpack:+        builder: 'paketobuildpacks\/builder:bionic'+  tagPolicy:+    sha256: {}+deploy:/" ./skaffold.yaml.tmp | tr '+' '\n' > ./skaffold.yaml
+  sed "s/deploy:/build:+  local:+    push: true+  artifacts:+    - image: $NAME+      buildpacks:+        builder: 'paketobuildpacks\/builder:bionic'+  tagPolicy:+    sha256: {}+deploy:/" ./skaffold.yaml.tmp | tr '+' '\n' > ./skaffold.yaml
   rm ./skaffold.yaml.tmp
   cd ..
 
@@ -182,7 +187,7 @@ function bind() {
     exit 1
   fi
   # look for volumeMounts
-  vm_defined=$(grep -i 'volumeMount' $NAME/boot-app.yaml --count)
+  vm_defined=$(grep -i 'volumeMount' $NAME/deployment.yaml --count)
   if [[ $vm_defined > 0 ]]; then
     echo "ERROR: Only one service binding is currently supported"
     exit 1
@@ -223,7 +228,7 @@ function bind() {
   echo "binding $SERVICE service for user $USER"
   kubectl create secret generic $SERVICE-binding --from-literal config.yaml="$yaml"
   # springbootapplication
-cat <<EOF >> $NAME/boot-app.yaml
+cat <<EOF >> $NAME/deployment.yaml
         volumeMounts:
         - mountPath: /workspace/config
           name: $SERVICE-binding

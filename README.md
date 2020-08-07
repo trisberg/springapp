@@ -17,7 +17,7 @@ POC of a CLI for creating Spring Boot Applications to run on Kubernetes
 
 ## Features
 
-The `springapp` command can initialize Spring Boot application that will run on Kubernetes via Mononoke. 
+The `springapp` command can initialize Spring Boot application that will run on Kubernetes. 
 
 Here is a `springapp` command example:
 
